@@ -2,6 +2,9 @@ import random
 import numpy as np
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
+from ortools.constraint_solver import routing_enums_pb2
+from ortools.constraint_solver import pywrapcp
+import folium
 
 # Generate random coordinates
 def generate_random_coordinates(num_locations):
@@ -28,7 +31,7 @@ min_samples = 5
 dbscan = DBSCAN(eps=epsilon, min_samples=min_samples)
 clusters = dbscan.fit_predict(data_scaled)
 
-#  Calculate centroids for each cluster
+# Calculate centroids for each cluster
 unique_clusters = set(clusters)
 cluster_centroids = []
 
@@ -44,15 +47,16 @@ for cluster_id in unique_clusters:
 for i, centroid in enumerate(cluster_centroids):
     print(f"Cluster {i+1} Centroid: {centroid}")
 
+# Initialize a map centered at a location (you can adjust the coordinates)
+map_center = [38.0, -97.0]  # Example center coordinates (adjust as needed)
+m = folium.Map(location=map_center, zoom_start=5)
 
-import random
-import numpy as np
-from sklearn.cluster import DBSCAN
-from sklearn.preprocessing import StandardScaler
-from ortools.constraint_solver import routing_enums_pb2
-from ortools.constraint_solver import pywrapcp
+# Define colors for different clusters (you can define more colors if needed)
+cluster_colors = ['red', 'blue', 'green', 'purple', 'orange']
 
-# Solve VRP for each cluster
+# Calculate VRP routes and store them in a list
+vrp_routes = []
+
 for i, centroid in enumerate(cluster_centroids):
     depot = [centroid]  # Depot is the cluster centroid
     locations = data[np.where(clusters == i)[0]]  # Locations in the cluster
@@ -79,133 +83,39 @@ for i, centroid in enumerate(cluster_centroids):
     while not routing.IsEnd(index):
         route.append(manager.IndexToNode(index))
         index = solution.Value(routing.NextVar(index))
-
-    print(f"Cluster {i+1} Route: {route}")
-
-import random
-import numpy as np
-from sklearn.cluster import DBSCAN
-from sklearn.preprocessing import StandardScaler
-from deap import base, creator, tools, algorithms
-import math
-
-# ... (Previous code for generating coordinates and clustering)
-
-# Define Genetic Algorithm parameters
-num_generations = 50
-population_size = 100
-
-# Create a fitness function using direct distance calculation
-def haversine_distance(coord1, coord2):
-    # Radius of the Earth in kilometers
-    R = 6371.0
-
-    # Convert latitude and longitude from degrees to radians
-    lat1, lon1 = math.radians(coord1[0]), math.radians(coord1[1])
-    lat2, lon2 = math.radians(coord2[0]), math.radians(coord2[1])
-
-    # Haversine formula
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-
-    a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-
-    distance = R * c
-    return distance
-
-# Create a dictionary to store the best routes for each cluster
-best_routes = {}
-
-# Iterate through each cluster and apply GA
-for cluster_id, centroid in enumerate(cluster_centroids):
-    # Filter data points belonging to this cluster
-    cluster_data = data[clusters == cluster_id]
     
-    # Define a function to calculate distances within this cluster
-    def evaluate_route(route):
-        total_distance = 0.0
-        for i in range(len(route) - 1):
-            from_location = cluster_data[route[i]]
-            to_location = cluster_data[route[i + 1]]
-            distance = haversine_distance(from_location, to_location)
-            total_distance += distance
+    vrp_routes.append(route)
 
-        # Add distance from the last to the first location (circular route)
-        first_location = cluster_data[route[0]]
-        last_location = cluster_data[route[-1]]
-        total_distance += haversine_distance(last_location, first_location)
+# Add cluster centroids and VRP routes to the map in order
+for i, (centroid, route) in enumerate(zip(cluster_centroids, vrp_routes)):
+    # Add cluster centroid marker with location number
+    folium.Marker(
+        location=centroid,
+        icon=folium.DivIcon(html=f'<div style="font-weight: bold;">{i + 1}</div>'),
+        popup=f"Cluster {i + 1} Centroid"
+    ).add_to(m)
 
-        return total_distance,
-    
-    # Create the toolbox and individual for this cluster
-    creator.create("FitnessMin", base.Fitness, weights=(-1.0,))
-    creator.create("Individual", list, fitness=creator.FitnessMin)
+    # Define a function to create a polyline for a route
+    def create_polyline(route, color, locations):
+        coordinates = []
+        for node in route:
+            if node < len(locations):
+                coordinates.append(locations[node])
+            else:
+                print(f"Warning: Node {node} is out of bounds for cluster {i + 1}.")
+        return folium.PolyLine(
+            locations=coordinates,
+            color=color,
+            weight=2.5,
+            opacity=1.0
+        )
 
-    toolbox = base.Toolbox()
-    toolbox.register("indices", random.sample, range(len(cluster_data)), len(cluster_data))
-    toolbox.register("individual", tools.initIterate, creator.Individual, toolbox.indices)
-    toolbox.register("population", tools.initRepeat, list, toolbox.individual)
-    toolbox.register("mate", tools.cxOrdered)
-    toolbox.register("mutate", tools.mutShuffleIndexes, indpb=0.05)
-    toolbox.register("select", tools.selTournament, tournsize=3)
-    toolbox.register("evaluate", evaluate_route)  # Register the evaluate function
+    # Add VRP route to the map as a polyline, passing the cluster's locations
+    color = cluster_colors[i % len(cluster_colors)]
+    polyline = create_polyline(route, color, locations)
+    if polyline is not None:
+        polyline.add_to(m)
 
-    # Create the population for this cluster
-    cluster_population = toolbox.population(n=population_size)
-    
-    # Create the Genetic Algorithm for this cluster
-    cluster_algorithm = algorithms.eaSimple(cluster_population, toolbox, cxpb=0.7, mutpb=0.2)
-
-    # Run the Genetic Algorithm for this cluster
-    for gen in range(num_generations):
-        cluster_algorithm, _ = algorithms.eaSimple(cluster_algorithm, toolbox, cxpb=0.7, mutpb=0.2, ngen=1)  # Use ngen=1
-        best_individual = tools.selBest(cluster_algorithm, k=1)[0]
-        best_route = evaluate_route(best_individual)[0]
-
-        # Update fitness values for the entire population
-        for ind in cluster_algorithm:
-            ind.fitness.values = evaluate_route(ind)
-
-        print(f"Cluster {cluster_id + 1}, Generation {gen + 1}: Best route length = {best_route:.2f} km")
-
-    # Store the best route for this cluster
-    best_routes[cluster_id] = (best_individual, best_route)
-
-# Print the best routes for each cluster
-for cluster_id, (best_individual, best_route) in best_routes.items():
-    print(f"Best route for Cluster {cluster_id + 1}: Length = {best_route:.2f} km")
-
-# ----------------------
-
-
-# import folium
-# import numpy as np
-
-# # Create a map centered around the centroids
-# map_center = np.mean(cluster_centroids, axis=0)
-# m = folium.Map(location=map_center, zoom_start=6)
-
-# # Function to plot a route on the map
-# def plot_route(route, color):
-#     coords = [locations[i] for i in route]
-#     coords.append(coords[0])  # Close the loop
-#     folium.PolyLine(locations=coords, color=color).add_to(m)
-
-# # Run the Genetic Algorithm and visualize routes
-# for gen in range(num_generations):
-#     algorithms.eaSimple(population, toolbox, cxpb=0.7, mutpb=0.2, ngen=1)
-#     best_individual = tools.selBest(population, k=1)[0]
-#     best_route = evaluate_route(best_individual)[0]
-
-#     print(f"Generation {gen+1}: Best route length = {best_route:.2f} km")
-
-#     # Plot the best route on the map
-#     plot_route(best_individual, 'blue')
-
-# # Save the map to an HTML file
-# m.save('route_visualization.html')
-
-# print("Best route found:", best_individual)
-
-
+        
+# Save the map to an HTML file
+m.save("routes_map.html")
