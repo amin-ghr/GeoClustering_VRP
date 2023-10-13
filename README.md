@@ -1,6 +1,6 @@
 # Geographic Clustering and Vehicle Routing Problem (VRP) with Google ortools
 
-This repository contains a Python script that demonstrates how to use Density-Based Spatial Clustering of Applications with Noise (DBSCAN) to cluster geographical data and solve the Vehicle Routing Problem (VRP) for each cluster using a Genetic Algorithm (GA). It uses the Google OR-Tools library to solve the VRP.
+This repository contains a Python script that demonstrates how to use Density-Based Spatial Clustering of Applications with Noise (DBSCAN) to cluster geographical data and solve the Vehicle Routing Problem (VRP) for each cluster. It uses the Google OR-Tools library to solve the VRP.
 
 ## Overview
 
@@ -14,7 +14,7 @@ The code performs the following tasks:
 
 4. **Cluster Centroids**: Calculates cluster centroids and filters out small clusters based on a specified minimum cluster size.
 
-5. **Vehicle Routing Problem (VRP) for Clusters**: For each significant cluster, it solves the VRP problem using a Genetic Algorithm. The GA algorithm aims to minimize the total travel distance for each cluster.
+5. **Vehicle Routing Problem (VRP) for Clusters**: For each significant cluster, it solves the VRP problem using Google ortools which aims to minimize the total travel distance for each cluster.
 
 ## Getting Started
 
@@ -30,7 +30,7 @@ The code performs the following tasks:
 ## Customization
 - You can adjust the latitude and longitude ranges in the code to match your geographical area of interest.
 
-- Modify parameters such as epsilon and min_samples for DBSCAN and GA parameters to fine-tune the clustering and optimization process.
+- Modify parameters such as epsilon and min_samples for DBSCAN to fine-tune the clustering and optimization process.
 
 ## Dependencies
 - NumPy
